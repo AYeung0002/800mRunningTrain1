@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>800m 訓練應用程式</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Inter 字體 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* 基本樣式 */
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            -webkit-tap-highlight-color: transparent; /* 移除行動裝置點擊高亮 */
+        }
+        
+        /* 隱藏視圖 */
+        .view {
+            display: none;
+        }
+        .view.active {
+            display: block;
+        }
+
+        /* 導航分頁樣式 */
+        .tab-btn {
+            transition: all 0.2s ease-in-out;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #f9fafb; /* gray-50 */
+        }
+        
+        /* 計時器字體 */
+        .timer-display {
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+        .workout-timer-display {
+            font-size: 3.75rem; /* text-6xl */
+            line-height: 1;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 1.5rem; /* mb-6 */
+        }
+        
+        /* 彈出視窗 (Modal) 樣式 */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease-in-out;
+            z-index: 50;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: white;
+            color: #1f2937; /* gray-800 */
+            padding: 1.5rem; /* 24px */
+            border-radius: 0.75rem; /* 12px */
+            width: 100%;
+            max-width: 400px;
+            transform: scale(0.95);
+            transition: all 0.2s ease-in-out;
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+
+        /* --- 緊湊版摘要頁面樣式 (Compact Summary) --- */
+        #dynamic-summary-content {
+            /* 設置雙欄佈局 */
+            column-count: 2;
+            column-gap: 1.5rem; /* gap-6 */
+            max-height: 70vh; /* 限制最大高度，以防萬一 */
+            overflow: hidden; /* 隱藏滾動條 */
+        }
+        
+        /* 確保項目不會在欄中間斷開 */
+        .summary-item {
+            -webkit-column-break-inside: avoid;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            padding-bottom: 0.5rem; /* pb-2 */
+            margin-bottom: 0.5rem; /* mb-2 */
+            border-bottom: 1px solid #e5e7eb; /* border-gray-200 */
+        }
+
+        /* 按鈕禁用樣式 */
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 進度條 */
+        .progress-bar-bg {
+            background-color: #374151; /* gray-700 */
+            height: 8px;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+        .progress-bar-fg {
+            background-color: #3b82f6; /* blue-500 */
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        /* 按鈕長按進度條 */
+        .btn-hold-progress {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            height: 5px;
+            background-color: rgba(255, 255, 255, 0.5);
+            width: 0;
+            transition: width 1s linear;
+        }
+        .btn-label {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* 動畫容器 */
+        #animation-container {
+            width: 100%;
+            height: 12rem; /* 192px */
+            background-color: #1f2937; /* gray-800 */
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 1rem;
+        }
+        .anim-svg {
+            width: auto;
+            height: 100%;
+            max-width: 100%;
+        }
+
+        /* --- 動畫樣式 --- */
+        .anim-svg path, .anim-svg rect, .anim-svg circle, .anim-svg line {
+            stroke-width: 3;
+            stroke: #9ca3af; /* gray-400 */
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .anim-svg .fill {
+            fill: #4b5563; /* gray-600 */
+            stroke: none;
+        }
+        .anim-svg .head {
+            fill: #9ca3af; /* gray-400 */
+            stroke: #9ca3af;
+        }
+
+        /* jog/sprint/skip */
+        @keyframes anim-run-leg {
+            0%, 100% { transform: rotate(30deg); }
+            50% { transform: rotate(-30deg); }
+        }
+        @keyframes anim-run-arm {
+            0%, 100% { transform: rotate(20deg); }
+            50% { transform: rotate(-20deg); }
+        }
+        .anim-run .leg-front { animation: anim-run-leg 0.5s infinite; transform-origin: 50px 30px; }
+        .anim-run .leg-back { animation: anim-run-leg 0.5s infinite 0.25s; transform-origin: 50px 30px; }
+        .anim-run .arm-front { animation: anim-run-arm 0.5s infinite 0.25s; transform-origin: 50px 30px; }
+        .anim-run .arm-back { animation: anim-run-arm 0.5s infinite; transform-origin: 50px 30px; }
+        /* sprint */
+        .anim-sprint .leg-front { animation: anim-run-leg 0.3s infinite; transform-origin: 50px 30px; }
+        .anim-sprint .leg-back { animation: anim-run-leg 0.3s infinite 0.15s; transform-origin: 50px 30px; }
+        .anim-sprint .arm-front { animation: anim-run-arm 0.3s infinite 0.15s; transform-origin: 50px 30px; }
+        .anim-sprint .arm-back { animation: anim-run-arm 0.3s infinite; transform-origin: 50px 30px; }
+
+        /* rest */
+        @keyframes anim-breathe {
+            0%, 100% { transform: scaleY(1); }
+            50% { transform: scaleY(1.03); }
+        }
+        .anim-rest .torso { animation: anim-breathe 2s infinite ease-in-out; transform-origin: 50px 45px; }
+
+        /* leg_swing */
+        @keyframes anim-leg-swing {
+            0%, 100% { transform: rotate(-45deg); }
+            50% { transform: rotate(45deg); }
+        }
+        .anim-leg-swing .leg-swing { animation: anim-leg-swing 1.5s infinite ease-in-out; transform-origin: 50px 45px; }
+
+        /* lunge_twist */
+        @keyframes anim-lunge-twist {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-30deg); }
+            100% { transform: rotate(0deg); }
+        }
+        .anim-lunge-twist .torso { animation: anim-lunge-twist 2s infinite ease-in-out; transform-origin: 50px 30px; }
+        .anim-lunge-twist .arm { animation: anim-lunge-twist 2s infinite ease-in-out; transform-origin: 50px 30px; }
+
+        /* arm_circles */
+        @keyframes anim-arm-circle {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .anim-arm-circles .arm { animation: anim-arm-circle 1.5s infinite linear; transform-origin: 50px 30px; }
+        
+        /* ankle_circles */
+        @keyframes anim-ankle-circle {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .anim-ankle-circles .foot { animation: anim-ankle-circle 1.5s infinite linear; transform-origin: 50px 85px; }
+
+        /* high_knees */
+        @keyframes anim-high-knee-leg {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-5px, -30px) rotate(20deg); }
+            50% { transform: translate(0, 0); }
+            75% { transform: translate(5px, -30px) rotate(-20deg); }
+            100% { transform: translate(0, 0); }
+        }
+        .anim-high-knees .leg-left { animation: anim-high-knee-leg 0.8s infinite; transform-origin: 45px 45px; }
+        .anim-high-knees .leg-right { animation: anim-high-knee-leg 0.8s infinite 0.4s; transform-origin: 55px 45px; }
+
+        /* glute_bridge */
+        @keyframes anim-glute-bridge {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .anim-glute-bridge .hip { animation: anim-glute-bridge 2s infinite ease-in-out; }
+
+        /* leg_kicks */
+        @keyframes anim-leg-kick-leg {
+            0%, 100% { transform: rotate(10deg); }
+            50% { transform: rotate(-70deg); }
+        }
+        @keyframes anim-leg-kick-arm {
+            0%, 100% { transform: rotate(-10deg); }
+            50% { transform: rotate(60deg); }
+        }
+        .anim-leg-kicks .leg-right { animation: anim-leg-kick-leg 1.5s infinite; transform-origin: 55px 45px; }
+        .anim-leg-kicks .arm-left { animation: anim-leg-kick-arm 1.5s infinite; transform-origin: 45px 30px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+
+    <!-- 主容器，模擬手機寬度 -->
+    <div class="max-w-md mx-auto min-h-screen bg-gray-800 shadow-xl">
+
+        <!-- 頂部標題和語言切換 -->
+        <header class="bg-gray-900 p-4 flex justify-between items-center shadow-lg sticky top-0 z-10">
+            <h1 class="text-xl font-bold" data-lang-key="appTitle">800m 訓練助手</h1>
+            <div>
+                <button id="lang-en" class="px-3 py-1 text-sm font-medium rounded-md bg-blue-600 text-white shadow-sm">EN</button>
+                <button id="lang-zh" class="px-3 py-1 text-sm font-medium rounded-md bg-gray-700 text-gray-300 ml-2">繁</button>
+            </div>
+        </header>
+
+        <!-- 導航分頁 -->
+        <nav class="bg-gray-900 flex justify-around shadow-md sticky top-[68px] z-10">
+            <button class="tab-btn flex-1 py-3 text-sm font-semibold text-gray-400 active" data-view="day1" data-lang-key="tabDay1">第 1 天</button>
+            <button class="tab-btn flex-1 py-3 text-sm font-semibold text-gray-400" data-view="day2" data-lang-key="tabDay2">第 2 天</button>
+            <button class="tab-btn flex-1 py-3 text-sm font-semibold text-gray-400" data-view="summary" data-lang-key="tabSummary">摘要</button>
+        </nav>
+
+        <!-- 內容區域 -->
+        <main class="p-4 pb-20">
+
+            <!-- 視圖: 第 1 天 -->
+            <div id="view-day1" class="view active space-y-4">
+                <!-- 訓練未開始時的視圖 -->
+                <div id="day1-start-screen" class="space-y-4">
+                    <h2 class="text-2xl font-bold text-white" data-lang-key="day1Title">第 1 天：速度耐力 & 乳酸耐受</h2>
+                    <button id="start-day1-btn" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold rounded-lg shadow-md transition" data-lang-key="btnStartTraining">
+                        開始訓練
+                    </button>
+                    <!-- 靜態概覽 (保留) -->
+                    <section class="bg-gray-700 p-4 rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold mb-3" data-lang-key="warmupTitle">暖身 (15 分鐘)</h3>
+                        <div class="space-y-2 text-sm">
+                            <p><strong data-lang-key="phase1">階段 1 (5 分鐘):</strong> <span data-lang-key="phase1Desc">輕鬆慢跑 800-1000m</span></p>
+                            <p><strong data-lang-key="phase2">階段 2 (4 分鐘):</strong> <span data-lang-key="phase2Desc">腿部擺動、弓箭步轉體...</span></p>
+                            <p><strong data-lang-key="phase3">階段 3 (3 分鐘):</strong> <span data-lang-key="phase3Desc">高抬腿、臀橋...</span></p>
+                            <p><strong data-lang-key="phase4">階段 4 (3 分鐘):</strong> <span data-lang-key="phase4Desc">A-Skip、加速跑 2x60m</span></p>
+                        </div>
+                    </section>
+                    <section class="bg-gray-700 p-4 rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold mb-3" data-lang-key="mainSessionTitle">主訓練 (35 分鐘)</h3>
+                        <div class="space-y-3 text-sm">
+                            <p data-lang-key="set1Desc">5 x 200m @ 36-37 秒 (休 2 分鐘)</p>
+                            <p data-lang-key="set2Desc">2 x 300m @ 54-56 秒 (休 2 分鐘)</p>
+                            <p data-lang-key="set3Desc">1 x 400m @ 72-75 秒 (最大努力)</p>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- 視圖: 第 2 天 -->
+            <div id="view-day2" class="view space-y-4">
+                <h2 class="text-2xl font-bold text-white" data-lang-key="day2Title">第 2 天：VO2 Max & 有氧能力</h2>
+                <button id="start-day2-btn" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold rounded-lg shadow-md transition" data-lang-key="btnStartTraining">
+                    開始訓練
+                </button>
+                <!-- Static overview for Day 2 -->
+                <section class="bg-gray-700 p-4 rounded-lg shadow-md">
+                    <h3 class="text-lg font-semibold mb-3" data-lang-key="warmupTitle">暖身 (15 分鐘)</h3>
+                    <p class="text-sm text-gray-300" data-lang-key="sameWarmup">與第 1 天相同</p>
+                </section>
+                <section class="bg-gray-700 p-4 rounded-lg shadow-md">
+                    <h3 class="text-lg font-semibold mb-3" data-lang-key="mainSessionTitle">主訓練</h3>
+                    <div class="space-y-3 text-sm">
+                        <p data-lang-key="day2Set1">4 x 600m @ 1:48-1:52 (休 2 分鐘)</p>
+                        <p data-lang-key="day2Set2">4 x 150m @ 95% (休 4 分鐘)</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 視圖: 摘要 -->
+            <div id="view-summary" class="view">
+                <div class="bg-gray-700 p-6 rounded-lg shadow-md text-center">
+                    <h2 class="text-2xl font-bold text-white mb-4" data-lang-key="summaryTitle">本日表現摘要</h2>
+                    <p class="text-gray-300 mb-6" data-lang-key="summaryDesc">完成訓練後，點此產生摘要以供截圖記錄。</p>
+                    <button id="generate-summary-btn" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition" data-lang-key="btnGenerateSummary">產生摘要</button>
+                </div>
+            </div>
+
+            <!-- 視圖: 進行中的訓練 (Active Training View) -->
+            <div id="view-training" class="view space-y-4">
+                <!-- 進度 -->
+                <div class="bg-gray-700 p-4 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 id="workout-step-title" class="text-lg font-semibold text-white"></h2>
+                        <span id="workout-step-progress" class="text-sm text-gray-300"></span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div id="workout-step-bar" class="progress-bar-fg" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <!-- 動畫容器 -->
+                <div id="animation-container">
+                    <!-- 動畫將被 JS 注入此處 -->
+                </div>
+
+                <!-- 計時器/碼錶 -->
+                <div class="bg-gray-700 p-6 rounded-lg shadow-md text-center">
+                    <div id="workout-timer-display" class="timer-display workout-timer-display">
+                        00:00.00
+                    </div>
+                    <p id="workout-step-desc" class="text-gray-300 mb-6 text-lg"></p>
+                    
+                    <!-- 控制按鈕 (新佈局) -->
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <button id="workout-lap-reset" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition col-span-1 relative overflow-hidden">
+                            <span class="btn-label" data-lang-key="btnLap">分圈</span>
+                            <span class="btn-hold-progress"></span>
+                        </button>
+                        <button id="workout-start-pause" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition col-span-2 text-lg relative overflow-hidden">
+                            <span class="btn-label" data-lang-key="btnStart">開始</span>
+                            <span class="btn-hold-progress"></span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <button id="workout-skip" class="w-full py-3 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-md transition" data-lang-key="btnSkip">略過</button>
+                        <button id="workout-next" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition" data-lang-key="btnNext">完成 (下一步)</button>
+                    </div>
+                </div>
+
+                 <!-- 分圈紀錄 (僅碼錶模式) -->
+                <div id="workout-laps-container" class="text-left max-h-48 overflow-y-auto bg-gray-700 rounded-lg p-3 hidden">
+                    <h4 class="font-semibold mb-2" data-lang-key="lapsTitle">分圈紀錄</h4>
+                    <ul id="workout-laps-list" class="space-y-1 text-sm timer-display">
+                        <!-- 分圈紀錄會顯示在這裡 -->
+                    </ul>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- 摘要彈出視窗 (Modal) -->
+    <div id="summary-modal" class="modal-overlay">
+        <div class="modal-content">
+            <!-- 這是您要截圖的區域 -->
+            <div id="summary-content-to-screenshot">
+                <h3 id="summary-title" class="text-lg font-bold text-center mb-2" data-lang-key="modalSummaryTitle">訓練摘要</h3>
+                <p class="text-xs text-center text-gray-500 mb-4" id="summary-date"></p>
+                
+                <!-- 動態摘要內容 (雙欄) -->
+                <div id="dynamic-summary-content">
+                    <!-- 摘要將被動態插入此處 -->
+                    <p class="text-gray-500" data-lang-key="noSummaryData">尚未有訓練數據。</p>
+                </div>
+            </div>
+            
+            <button id="close-summary-modal" class="w-full mt-6 py-2 bg-gray-700 hover:bg-gray-800 text-white font-semibold rounded-lg transition" data-lang-key="btnClose">關閉</button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- 雙語內容 (Bilingual Content) ---
+        const textStrings = {
+            'en': {
+                'appTitle': '800m Training Assistant',
+                'tabDay1': 'Day 1',
+                'tabDay2': 'Day 2',
+                'tabSummary': 'Summary',
+                'day1Title': 'Day 1: Speed Endurance & Lactate Tolerance',
+                'warmupTitle': 'Warm-Up (15 min)',
+                'phase1': 'Phase 1 - Raise (5 min):',
+                'phase1Desc': 'Easy jog 800-1000m',
+                'phase2': 'Phase 2 - Mobilize (4 min):',
+                'phase2Desc': 'Leg swings, walking lunges...',
+                'phase3': 'Phase 3 - Activate (3 min):',
+                'phase3Desc': 'High knee march, glute bridges...',
+                'phase4': 'Phase 4 - Potentiate (3 min):',
+                'phase4Desc': 'A-Skip, 2x60m build-ups',
+                'mainSessionTitle': 'Main Session (35 min)',
+                'set1Desc': '5 x 200m @ 36-37 sec (2 min rec)',
+                'set2Desc': '2 x 300m @ 54-56 sec (2 min rec)',
+                'set3Desc': '1 x 400m @ 72-75 sec (max effort)',
+                'cooldownTitle': 'Cool-Down (10 min)',
+                'cooldownDesc': '800m easy jog/walk, static stretching.',
+                'day2Title': 'Day 2: VO2 Max & Aerobic Power',
+                'sameWarmup': 'Same as Day 1',
+                'day2Set1': '4 x 600m @ 1:48-1:52 (2 min rec)',
+                'day2Set2': '4 x 150m @ 95% (4 min rec)',
+                'comingSoon': 'Content will be available in the full version.',
+                'btnStart': 'Start',
+                'btnStop': 'Stop',
+                'btnPause': 'Pause (Hold 1s)',
+                'btnResume': 'Resume',
+                'btnReset': 'Reset (Hold 1s)',
+                'btnLap': 'Lap',
+                'btnSkip': 'Skip Step',
+                'btnNext': 'Finish (Next)',
+                'btnStartTraining': 'Start Training',
+                'lapsTitle': 'Laps',
+                'summaryTitle': 'Day Performance Summary',
+                'summaryDesc': 'After training, generate a summary for screenshot.',
+                'btnGenerateSummary': 'Generate Summary',
+                'modalSummaryTitle': 'Training Summary',
+                'modalSummaryDay1': 'Day 1 Training Summary',
+                'modalSummaryDay2': 'Day 2 Training Summary',
+                'summaryTarget': 'T', // 縮寫
+                'summaryActual': 'A', // 縮寫
+                'summarySkipped': 'Skipped',
+                'noSummaryData': 'No training data yet.',
+                'progressStep': 'Step',
+                'progressOf': 'of',
+                'workoutComplete': 'Workout Complete!',
+                'btnClose': 'Close',
+                // Individual Warm-ups
+                'wup_jog': 'Warm-up: Easy Jog', 'wup_jog_desc': 'Phase 1: 5:00 Easy Jog',
+                'wup_leg_swing': 'Warm-up: Leg Swings', 'wup_leg_swing_desc': '1:00 | 10x fwd/back, 10x side (each)',
+                'wup_lunge_twist': 'Warm-up: Lunge w/ Twist', 'wup_lunge_twist_desc': '1:00 | 10x each side',
+                'wup_arm_circles': 'Warm-up: Arm Circles', 'wup_arm_circles_desc': '1:00 | 10x fwd, 10x back',
+                'wup_ankle_circles': 'Warm-up: Ankle Circles', 'wup_ankle_circles_desc': '1:00 | 8x each direction',
+                'wup_high_knees': 'Warm-up: High Knee March', 'wup_high_knees_desc': '1:00 | 20x each leg',
+                'wup_glute_bridge': 'Warm-up: Glute Bridges', 'wup_glute_bridge_desc': '1:00 | 10 reps (2s hold)',
+                'wup_leg_kicks': 'Warm-up: Straight Leg Kicks', 'wup_leg_kicks_desc': '1:00 | 8x each leg',
+                'wup_a_skip': 'Warm-up: A-Skip', 'wup_a_skip_desc': '1:00 | 20m x 2',
+                'wup_fast_skip': 'Warm-up: Fast Skip', 'wup_fast_skip_desc': '1:00 | 20m x 2',
+                'wup_strides': 'Warm-up: Build-up Strides', 'wup_strides_desc': '1:00 | 60m (60-95% effort)',
+                // Main Sets
+                'set_sprint': 'Main Set: Sprint', 'set_sprint_desc': 'Run as prescribed',
+                'set_rest': 'Rest', 'set_rest_desc': 'Walk Recovery',
+                'set_cooldown': 'Cool-Down', 'set_cooldown_desc': '10:00 Easy Jog/Walk',
+            },
+            'zh': {
+                'appTitle': '800m 訓練助手',
+                'tabDay1': '第 1 天',
+                'tabDay2': '第 2 天',
+                'tabSummary': '摘要',
+                'day1Title': '第 1 天：速度耐力 & 乳酸耐受',
+                'warmupTitle': '暖身 (15 分鐘)',
+                'phase1': '階段 1 - 提升 (5 分鐘):',
+                'phase1Desc': '輕鬆慢跑 800-1000m',
+                'phase2': '階段 2 - 活動 (4 分鐘):',
+                'phase2Desc': '腿部擺動、弓箭步轉體...',
+                'phase3': '階段 3 - 啟動 (3 分鐘):',
+                'phase3Desc': '高抬腿、臀橋...',
+                'phase4': '階段 4 - 增強 (3 分鐘):',
+                'phase4Desc': 'A-Skip、加速跑 2x60m',
+                'mainSessionTitle': '主訓練 (35 分鐘)',
+                'set1Desc': '5 x 200m @ 36-37 秒 (休 2 分鐘)',
+                'set2Desc': '2 x 300m @ 54-56 秒 (休 2 分鐘)',
+                'set3Desc': '1 x 400m @ 72-75 秒 (最大努力)',
+                'cooldownTitle': '緩和 (10 分鐘)',
+                'cooldownDesc': '800m 輕鬆跑/走，靜態伸展。',
+                'day2Title': '第 2 天：VO2 Max & 有氧能力',
+                'sameWarmup': '與第 1 天相同',
+                'day2Set1': '4 x 600m @ 1:48-1:52 (休 2 分鐘)',
+                'day2Set2': '4 x 150m @ 95% (休 4 分鐘)',
+                'comingSoon': '此內容將在完整版中提供。',
+                'btnStart': '開始',
+                'btnStop': '停止',
+                'btnPause': '暫停 (長按 1 秒)',
+                'btnResume': '繼續',
+                'btnReset': '重置 (長按 1 秒)',
+                'btnLap': '分圈',
+                'btnSkip': '略過此步',
+                'btnNext': '完成 (下一步)',
+                'btnStartTraining': '開始訓練',
+                'lapsTitle': '分圈紀錄',
+                'summaryTitle': '本日表現摘要',
+                'summaryDesc': '完成訓練後，點此產生摘要以供截圖記錄。',
+                'btnGenerateSummary': '產生摘要',
+                'modalSummaryTitle': '訓練摘要',
+                'modalSummaryDay1': '第 1 天 訓練摘要',
+                'modalSummaryDay2': '第 2 天 訓練摘要',
+                'summaryTarget': 'T', // 縮寫
+                'summaryActual': 'A', // 縮寫
+                'summarySkipped': '已略過',
+                'noSummaryData': '尚未有訓練數據。',
+                'progressStep': '步驟',
+                'progressOf': ' / ',
+                'workoutComplete': '訓練完成！',
+                'btnClose': '關閉',
+                // Individual Warm-ups
+                'wup_jog': '暖身：輕鬆慢跑', 'wup_jog_desc': '階段 1：5:00 輕鬆慢跑',
+                'wup_leg_swing': '暖身：腿部擺動', 'wup_leg_swing_desc': '1:00 | 10x 前後, 10x 左右 (每邊)',
+                'wup_lunge_twist': '暖身：弓箭步轉體', 'wup_lunge_twist_desc': '1:00 | 10x 每邊',
+                'wup_arm_circles': '暖身：手臂繞環', 'wup_arm_circles_desc': '1:00 | 10x 向前, 10x 向後',
+                'wup_ankle_circles': '暖身：腳踝繞環', 'wup_ankle_circles_desc': '1:00 | 8x 每個方向',
+                'wup_high_knees': '暖身：高抬腿', 'wup_high_knees_desc': '1:00 | 20x 每邊',
+                'wup_glute_bridge': '暖身：臀橋', 'wup_glute_bridge_desc': '1:00 | 10 次 (停留 2 秒)',
+                'wup_leg_kicks': '暖身：直腿前踢', 'wup_leg_kicks_desc': '1:00 | 8x 每邊',
+                'wup_a_skip': '暖身：A-Skip', 'wup_a_skip_desc': '1:00 | 20m x 2',
+                'wup_fast_skip': '暖身：Fast Skip', 'wup_fast_skip_desc': '1:00 | 20m x 2',
+                'wup_strides': '暖身：漸速跑', 'wup_strides_desc': '1:00 | 60m (60-95% 力)',
+                // Main Sets
+                'set_sprint': '主訓練：衝刺', 'set_sprint_desc': '按計畫執行',
+                'set_rest': '休息', 'set_rest_desc': '步行恢復',
+                'set_cooldown': '緩和', 'set_cooldown_desc': '10:00 輕鬆跑/走',
+            }
+        };
+
+        // --- 動畫 SVG 數據 ---
+        const animations = {
+            placeholder: `<svg class="anim-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><text x="50" y="55" font-size="10" fill="#9ca3af" text-anchor="middle" data-lang-key="placeholder">Animation</text></svg>`,
+            jog: `<svg class="anim-svg anim-run" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45 L 45 65"/><path class="arm-back" d="M50 30 L 40 45"/><path class="leg-back" d="M45 65 L 50 80"/><path class="arm-front" d="M50 30 L 60 45"/><path class="leg-front" d="M45 65 L 40 80"/></svg>`,
+            sprint: `<svg class="anim-svg anim-sprint" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5" transform="rotate(15 50 50)"/><path class="torso" d="M50 25 V 45 L 45 65" transform="rotate(15 50 50)"/><path class="arm-back" d="M50 30 L 40 45" transform="rotate(15 50 50)"/><path class="leg-back" d="M45 65 L 50 85" transform="rotate(15 50 50)"/><path class="arm-front" d="M50 30 L 60 45" transform="rotate(15 50 50)"/><path class="leg-front" d="M45 65 L 35 85" transform="rotate(15 50 50)"/></svg>`,
+            rest: `<svg class="anim-svg anim-rest" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path d="M50 30 L 40 45"/><path d="M50 30 L 60 45"/><path d="M50 45 L 45 65 L 45 85"/><path d="M50 45 L 55 65 L 55 85"/></svg>`,
+            leg_swing: `<svg class="anim-svg anim-leg-swing" viewBox="0 0 100 100"><line x1="70" y1="20" x2="70" y2="60" stroke="#6b7280" stroke-width="4"/><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path class="arm-front" d="M50 30 L 70 40"/><path class="leg-static" d="M50 45 L 50 85"/><path class="leg-swing" d="M50 45 L 30 75"/></svg>`,
+            lunge_twist: `<svg class="anim-svg anim-lunge-twist" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path class="arm" d="M40 35 H 60"/><path class="leg-back" d="M50 45 L 40 65 L 30 85"/><path class="leg-front" d="M50 45 L 60 65 V 85 L 70 85"/></svg>`,
+            arm_circles: `<svg class="anim-svg anim-arm-circles" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path class="arm" d="M50 30 L 75 30"/><path d="M50 45 L 45 85"/><path d="M50 45 L 55 85"/></svg>`,
+            ankle_circles: `<svg class="anim-svg anim-ankle-circles" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path d="M50 30 L 40 45"/><path d="M50 30 L 60 45"/><path class="leg-static" d="M50 45 L 40 85"/><path class="leg-swing" d="M50 45 V 70"/><circle class="foot" cx="50" cy="85" r="10" stroke-width="3"/></svg>`,
+            high_knees: `<svg class="anim-svg anim-high-knees" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path class="arm-left" d="M50 30 L 40 45"/><path class="arm-right" d="M50 30 L 60 45"/><path class="leg-left" d="M50 45 L 45 65 V 85"/><path class="leg-right" d="M50 45 L 55 65 V 85"/></svg>`,
+            glute_bridge: `<svg class="anim-svg anim-glute-bridge" viewBox="0 0 100 100" style="transform: rotate(90deg) scaleX(-1);"><path class="fill" d="M20 70 L 30 85 L 40 70 Z"/><path d="M20 70 L 50 70"/><path class="hip" d="M50 70 L 70 50 L 80 70"/><path d="M80 70 L 90 70 H 95"/></svg>`,
+            leg_kicks: `<svg class="anim-svg anim-leg-kicks" viewBox="0 0 100 100"><circle class="head" cx="50" cy="20" r="5"/><path class="torso" d="M50 25 V 45"/><path class="arm-left" d="M50 30 L 30 45"/><path class="arm-right" d="M50 30 L 70 45"/><path class="leg-left" d="M50 45 L 45 85"/><path class="leg-right" d="M50 45 L 55 85"/></svg>`,
+        };
+        // a_skip and fast_skip will reuse 'jog' animation
+        animations.a_skip = animations.jog;
+        animations.fast_skip = animations.jog;
+        animations.strides = animations.sprint;
+
+
+        // --- 暖身計畫 (Warm-up Plan) ---
+        const warmupPlan = [
+            { id: 'wup1', name_key: 'wup_jog', desc_key: 'wup_jog_desc', type: 'timer', duration: 5 * 60 * 1000, target: '5:00', animationId: 'jog', group: 'warmup' },
+            { id: 'wup2_1', name_key: 'wup_leg_swing', desc_key: 'wup_leg_swing_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'leg_swing', group: 'warmup' },
+            { id: 'wup2_2', name_key: 'wup_lunge_twist', desc_key: 'wup_lunge_twist_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'lunge_twist', group: 'warmup' },
+            { id: 'wup2_3', name_key: 'wup_arm_circles', desc_key: 'wup_arm_circles_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'arm_circles', group: 'warmup' },
+            { id: 'wup2_4', name_key: 'wup_ankle_circles', desc_key: 'wup_ankle_circles_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'ankle_circles', group: 'warmup' },
+            { id: 'wup3_1', name_key: 'wup_high_knees', desc_key: 'wup_high_knees_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'high_knees', group: 'warmup' },
+            { id: 'wup3_2', name_key: 'wup_glute_bridge', desc_key: 'wup_glute_bridge_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'glute_bridge', group: 'warmup' },
+            { id: 'wup3_3', name_key: 'wup_leg_kicks', desc_key: 'wup_leg_kicks_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'leg_kicks', group: 'warmup' },
+            { id: 'wup4_1', name_key: 'wup_a_skip', desc_key: 'wup_a_skip_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'a_skip', group: 'warmup' },
+            { id: 'wup4_2', name_key: 'wup_fast_skip', desc_key: 'wup_fast_skip_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'fast_skip', group: 'warmup' },
+            { id: 'wup4_3', name_key: 'wup_strides', desc_key: 'wup_strides_desc', type: 'timer', duration: 1 * 60 * 1000, target: '1:00', animationId: 'strides', group: 'warmup' },
+        ];
+        
+        // 公共步驟 (Common Steps)
+        const sprintStep = { name_key: 'set_sprint', desc_key: 'set_sprint_desc', type: 'stopwatch', animationId: 'sprint', group: 'main' };
+        const restStep = { name_key: 'set_rest', desc_key: 'set_rest_desc', type: 'timer', animationId: 'rest', group: 'rest' };
+        const cooldownStep = { id: 'cooldown', name_key: 'set_cooldown', desc_key: 'set_cooldown_desc', type: 'timer', duration: 10 * 60 * 1000, target: '10:00', animationId: 'jog', group: 'cooldown' };
+
+
+        // --- 訓練計畫數據 (Training Plan Data) ---
+        const trainingPlan = {
+            day1: [
+                ...warmupPlan,
+                // Set 1: 5 x 200m @ 36-37s, 2 min rec
+                { ...sprintStep, id: 'd1_s1_r1', name_zh: '200m 衝刺 (1/5)', name_en: '200m Sprint (1/5)', target: '36-37s' },
+                { ...restStep, id: 'd1_s1_rec1', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd1_s1_r2', name_zh: '200m 衝刺 (2/5)', name_en: '200m Sprint (2/5)', target: '36-37s' },
+                { ...restStep, id: 'd1_s1_rec2', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd1_s1_r3', name_zh: '200m 衝刺 (3/5)', name_en: '200m Sprint (3/5)', target: '36-37s' },
+                { ...restStep, id: 'd1_s1_rec3', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd1_s1_r4', name_zh: '200m 衝刺 (4/5)', name_en: '200m Sprint (4/5)', target: '36-37s' },
+                { ...restStep, id: 'd1_s1_rec4', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd1_s1_r5', name_zh: '200m 衝刺 (5/5)', name_en: '200m Sprint (5/5)', target: '36-37s' },
+                // Set Rest: 4 min
+                { ...restStep, id: 'd1_s1_rest', name_zh: '組間休息', name_en: 'Set Rest', duration: 4 * 60 * 1000, target: '4:00' },
+                // Set 2: 2 x 300m @ 54-56s, 2 min rec
+                { ...sprintStep, id: 'd1_s2_r1', name_zh: '300m 衝刺 (1/2)', name_en: '300m Sprint (1/2)', target: '54-56s' },
+                { ...restStep, id: 'd1_s2_rec1', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd1_s2_r2', name_zh: '300m 衝刺 (2/2)', name_en: '300m Sprint (2/2)', target: '54-56s' },
+                // Set Rest: 5 min
+                { ...restStep, id: 'd1_s2_rest', name_zh: '組間休息', name_en: 'Set Rest', duration: 5 * 60 * 1000, target: '5:00' },
+                // Set 3: 1 x 400m @ 72-75s
+                { ...sprintStep, id: 'd1_s3_r1', name_zh: '400m 衝刺 (1/1)', name_en: '400m Sprint (1/1)', target: '72-75s' },
+                // Cooldown
+                { ...cooldownStep }
+            ],
+            day2: [
+                ...warmupPlan,
+                // Main Set: 4x 600m @ 1:48-1:52, 2 min rec
+                { ...sprintStep, id: 'd2_s1_r1', name_zh: '600m 跑步 (1/4)', name_en: '600m Run (1/4)', target: '1:48-1:52' },
+                { ...restStep, id: 'd2_s1_rec1', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd2_s1_r2', name_zh: '600m 跑步 (2/4)', name_en: '600m Run (2/4)', target: '1:48-1:52' },
+                { ...restStep, id: 'd2_s1_rec2', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd2_s1_r3', name_zh: '600m 跑步 (3/4)', name_en: '600m Run (3/4)', target: '1:48-1:52' },
+                { ...restStep, id: 'd2_s1_rec3', duration: 2 * 60 * 1000, target: '2:00' },
+                { ...sprintStep, id: 'd2_s1_r4', name_zh: '600m 跑步 (4/4)', name_en: '600m Run (4/4)', target: '1:48-1:52' },
+                // Set Rest: 5 min
+                { ...restStep, id: 'd2_s1_rest', name_zh: '組間休息', name_en: 'Set Rest', duration: 5 * 60 * 1000, target: '5:00' },
+                // Speed Component: 4x 150m @ 95%, 4 min rec
+                { ...sprintStep, id: 'd2_s2_r1', name_zh: '150m 衝刺 (1/4)', name_en: '150m Sprint (1/4)', target: 'N/A' },
+                { ...restStep, id: 'd2_s2_rec1', duration: 4 * 60 * 1000, target: '4:00' },
+                { ...sprintStep, id: 'd2_s2_r2', name_zh: '150m 衝刺 (2/4)', name_en: '150m Sprint (2/4)', target: 'N/A' },
+                { ...restStep, id: 'd2_s2_rec2', duration: 4 * 60 * 1000, target: '4:00' },
+                { ...sprintStep, id: 'd2_s2_r3', name_zh: '150m 衝刺 (3/4)', name_en: '150m Sprint (3/4)', target: 'N/A' },
+                { ...restStep, id: 'd2_s2_rec3', duration: 4 * 60 * 1000, target: '4:00' },
+                { ...sprintStep, id: 'd2_s2_r4', name_zh: '150m 衝刺 (4/4)', name_en: '150m Sprint (4/4)', target: 'N/A' },
+                // Cooldown
+                { ...cooldownStep }
+            ]
+        };
+
+        // --- 應用程式狀態 (App State) ---
+        let currentLang = 'zh';
+        let currentView = 'day1';
+        let currentDayId = 'day1';
+        let currentDayPlan = null;
+        let currentStepIndex = 0;
+        let trainingInProgress = false;
+        let day1Results = [];
+        let day2Results = [];
+
+        // --- 計時器狀態 (Timer State) ---
+        let timerState = {
+            running: false,
+            startTime: 0,
+            elapsedTime: 0,
+            remainingTime: 0,
+            intervalId: null,
+            mode: 'stopwatch', // 'timer' or 'stopwatch'
+            targetDuration: 0,
+            lapCounter: 1
+        };
+        let pressTimer = null;
+        let pressStartTime = 0;
+
+        // --- DOM 元素 (DOM Elements) ---
+        const langEnBtn = document.getElementById('lang-en');
+        const langZhBtn = document.getElementById('lang-zh');
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const views = document.querySelectorAll('.view');
+        
+        // Day 1 視圖
+        const day1StartScreen = document.getElementById('day1-start-screen');
+        const startDay1Btn = document.getElementById('start-day1-btn');
+        // Day 2 視圖
+        const day2StartScreen = document.getElementById('view-day2'); // This is the wrapper
+        const startDay2Btn = document.getElementById('start-day2-btn');
+        
+        // 訓練視圖
+        const trainingView = document.getElementById('view-training');
+        const stepTitle = document.getElementById('workout-step-title');
+        const stepProgress = document.getElementById('workout-step-progress');
+        const stepProgressBar = document.getElementById('workout-step-bar');
+        const animContainer = document.getElementById('animation-container');
+        const timerDisplay = document.getElementById('workout-timer-display');
+        const stepDesc = document.getElementById('workout-step-desc');
+        const startPauseBtn = document.getElementById('workout-start-pause');
+        const lapResetBtn = document.getElementById('workout-lap-reset');
+        const skipBtn = document.getElementById('workout-skip');
+        const nextBtn = document.getElementById('workout-next');
+        const lapsContainer = document.getElementById('workout-laps-container');
+        const lapsList = document.getElementById('workout-laps-list');
+
+        // 摘要視圖
+        const summaryModal = document.getElementById('summary-modal');
+        const summaryTitleEl = document.getElementById('summary-title');
+        const generateBtn = document.getElementById('generate-summary-btn');
+        const closeBtn = document.getElementById('close-summary-modal');
+        const summaryDateEl = document.getElementById('summary-date');
+        const dynamicSummaryContent = document.getElementById('dynamic-summary-content');
+
+
+        // --- 語言切換邏輯 (Language Switching) ---
+        function setLanguage(lang) {
+            if (!textStrings[lang]) return;
+            currentLang = lang;
+            
+            // 更新按鈕樣式
+            if (lang === 'en') {
+                langEnBtn.classList.remove('bg-gray-700', 'text-gray-300');
+                langEnBtn.classList.add('bg-blue-600', 'text-white');
+                langZhBtn.classList.add('bg-gray-700', 'text-gray-300');
+                langZhBtn.classList.remove('bg-blue-600', 'text-white');
+                document.documentElement.lang = 'en';
+            } else {
+                langZhBtn.classList.remove('bg-gray-700', 'text-gray-300');
+                langZhBtn.classList.add('bg-blue-600', 'text-white');
+                langEnBtn.classList.add('bg-gray-700', 'text-gray-300');
+                langEnBtn.classList.remove('bg-blue-600', 'text-white');
+                document.documentElement.lang = 'zh-TW';
+            }
+
+            // 更新所有帶 data-lang-key 屬性的元素
+            document.querySelectorAll('[data-lang-key]').forEach(el => {
+                const key = el.getAttribute('data-lang-key');
+                if (textStrings[currentLang][key]) {
+                    el.innerText = textStrings[currentLang][key];
+                }
+            });
+
+            // 手動更新訓練視圖的按鈕文字 (因為它們會動態改變)
+            updateTimerButtons();
+            // 如果訓練正在進行，也更新當前步驟的文字
+            if (trainingInProgress) {
+                loadStep(false); // false 表示不要重置計時器
+            }
+        }
+
+        langEnBtn.addEventListener('click', () => setLanguage('en'));
+        langZhBtn.addEventListener('click', () => setLanguage('zh'));
+
+        // --- 視圖切換邏輯 (View Switching) ---
+        function showView(viewId) {
+            currentView = viewId;
+            views.forEach(view => {
+                view.classList.toggle('active', view.id === `view-${viewId}`);
+            });
+
+            // Tab logic
+            let activeTab = viewId;
+            if (viewId === 'training') {
+                activeTab = currentDayId; // Keep Day 1 or Day 2 tab active
+            }
+            tabButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-view') === activeTab);
+            });
+        }
+
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                showView(btn.getAttribute('data-view'));
+            });
+        });
+
+        // --- 動畫邏輯 (Animation Logic) ---
+        function showAnimation(animationId) {
+            if (!animationId || !animations[animationId]) {
+                animContainer.innerHTML = animations.placeholder;
+            } else {
+                animContainer.innerHTML = animations[animationId];
+            }
+        }
+
+        // --- 計時器 & 碼錶邏輯 (Timer & Stopwatch Logic) ---
+
+        function formatTime(timeInMillis) {
+            const totalMs = Math.abs(timeInMillis);
+            const ms = String(Math.floor(totalMs % 1000)).padStart(3, '0').slice(0, 2);
+            const totalSeconds = Math.floor(totalMs / 1000);
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+            const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+            
+            const sign = timeInMillis < 0 ? "-" : "";
+            
+            return `${sign}${minutes}:${seconds}.${ms}`;
+        }
+
+        function updateTimerDisplay() {
+            const now = Date.now();
+            let displayTime;
+
+            if (timerState.mode === 'stopwatch') {
+                timerState.elapsedTime = now - timerState.startTime;
+                displayTime = timerState.elapsedTime;
+            } else { // 'timer'
+                const timePassed = now - timerState.startTime;
+                timerState.remainingTime = timerState.targetDuration - timePassed;
+                displayTime = timerState.remainingTime;
+                
+                if (timerState.remainingTime <= 0) {
+                    displayTime = 0;
+                    stopTimer(); // 停止 (移除 now 參數)
+                    timerDisplay.innerText = formatTime(0);
+                    // 可以在此處播放音效
+                }
+            }
+            timerDisplay.innerText = formatTime(displayTime);
+        }
+
+        function startTimer() {
+            if (timerState.running) return;
+            timerState.running = true;
+            
+            if (timerState.mode === 'stopwatch') {
+                timerState.startTime = Date.now() - timerState.elapsedTime;
+            } else { // 'timer'
+                timerState.startTime = Date.now() - (timerState.targetDuration - timerState.remainingTime);
+            }
+            
+            timerState.intervalId = setInterval(updateTimerDisplay, 10);
+            updateTimerButtons();
+        }
+
+        function stopTimer(stopTimeOverride) { // 增加 stopTimeOverride 參數
+            if (!timerState.running) return;
+            timerState.running = false;
+            clearInterval(timerState.intervalId);
+            timerState.intervalId = null;
+
+            const stopTime = stopTimeOverride || Date.now(); // 使用覆蓋時間戳 (如果提供)
+
+            if (timerState.mode === 'stopwatch') {
+                timerState.elapsedTime = stopTime - timerState.startTime;
+            } else { // 'timer'
+                const timePassed = stopTime - timerState.startTime;
+                timerState.remainingTime = timerState.targetDuration - timePassed;
+                if (timerState.remainingTime < 0) timerState.remainingTime = 0;
+            }
+            
+            updateTimerButtons();
+
+            // *** 新增的修復 ***
+            // 手動更新一次顯示，以反映長按暫停時校正後的時間
+            // 這樣可以確保顯示的時間與內部儲存的時間一致
+            if (timerState.mode === 'stopwatch') {
+                timerDisplay.innerText = formatTime(timerState.elapsedTime);
+            } else {
+                timerDisplay.innerText = formatTime(timerState.remainingTime);
+            }
+        }
+
+        function resetTimer() {
+            stopTimer(); // 此處調用時，timerState.running 已為 false，會立刻返回
+            timerState.elapsedTime = 0;
+            timerState.remainingTime = timerState.targetDuration;
+            timerState.lapCounter = 1;
+            lapsList.innerHTML = '';
+            
+            const displayTime = timerState.mode === 'timer' ? timerState.targetDuration : 0;
+            timerDisplay.innerText = formatTime(displayTime);
+            updateTimerButtons();
+        }
+
+        function recordLap() {
+            if (!timerState.running || timerState.mode !== 'stopwatch') return;
+
+            const lapTime = formatTime(timerState.elapsedTime);
+            const li = document.createElement('li');
+            li.className = 'flex justify-between';
+            
+            const lapText = textStrings[currentLang]['btnLap'] || 'Lap';
+            li.innerHTML = `
+                <span>${lapText} ${timerState.lapCounter}</span>
+                <span>${lapTime}</span>
+            `;
+            lapsList.prepend(li);
+            timerState.lapCounter++;
+        }
+
+        function updateTimerButtons() {
+            const startLabel = startPauseBtn.querySelector('.btn-label');
+            const lapResetLabel = lapResetBtn.querySelector('.btn-label');
+            
+            const startKey = timerState.running ? 'btnPause' : 'btnStart';
+            startLabel.innerText = textStrings[currentLang][startKey];
+            startPauseBtn.classList.toggle('bg-green-600', !timerState.running);
+            startPauseBtn.classList.toggle('hover:bg-green-700', !timerState.running);
+            startPauseBtn.classList.toggle('bg-red-600', timerState.running);
+            startPauseBtn.classList.toggle('hover:bg-red-700', timerState.running);
+
+
+            if (timerState.mode === 'stopwatch') {
+                const lapResetKey = timerState.running ? 'btnLap' : 'btnReset';
+                lapResetLabel.innerText = textStrings[currentLang][lapResetKey];
+                lapsContainer.classList.remove('hidden');
+            } else { // 'timer'
+                lapResetLabel.innerText = textStrings[currentLang]['btnReset'];
+                lapsContainer.classList.add('hidden');
+            }
+            nextBtn.disabled = timerState.running; // 正在計時不允許按下一步
+        }
+
+        // --- 按鈕長按邏輯 (Long Press Button Logic) ---
+        function setupButtonHold(button, clickCallback, holdCallback) {
+            const progress = button.querySelector('.btn-hold-progress');
+            let pressTimer = null;
+            let actionTaken = false;
+
+            const startPress = (e) => {
+                e.preventDefault();
+                actionTaken = false;
+                const pressStartTime = Date.now(); // 在按壓開始時立刻記錄時間
+                
+                if (holdCallback) {
+                    progress.style.transition = 'width 1s linear';
+                    progress.style.width = '100%';
+                    pressTimer = setTimeout(() => {
+                        holdCallback(pressStartTime); // 將按壓開始時間傳遞給回調
+                        actionTaken = true;
+                        progress.style.transition = 'none';
+                        progress.style.width = '0%';
+                        pressTimer = null;
+                    }, 1000);
+                }
+            };
+
+            const endPress = (e) => {
+                e.preventDefault();
+                if (pressTimer) {
+                    clearTimeout(pressTimer);
+                    pressTimer = null;
+                }
+                
+                // 只有在長按動作未觸發時，才執行點擊動作
+                if (!actionTaken && clickCallback) {
+                    clickCallback(); // 執行一般點擊動作
+                }
+                
+                progress.style.transition = 'none';
+                progress.style.width = '0%';
+            };
+
+            // 綁定事件
+            button.addEventListener('mousedown', startPress);
+            button.addEventListener('mouseup', endPress);
+            button.addEventListener('mouseleave', endPress);
+            button.addEventListener('touchstart', startPress, { passive: false });
+            button.addEventListener('touchend', endPress);
+            button.addEventListener('touchcancel', endPress);
+        }
+
+        // 啟動/暫停 按鈕
+        setupButtonHold(
+            startPauseBtn,
+            () => { // Click Action: START
+                if (!timerState.running) {
+                    startTimer();
+                }
+            },
+            (pressStartTime) => { // Hold Action: PAUSE - 接收 pressStartTime
+                if (timerState.running) {
+                    stopTimer(pressStartTime); // 將精確的開始按壓時間傳給 stopTimer
+                }
+            }
+        );
+
+        // 分圈/重置 按鈕
+        setupButtonHold(
+            lapResetBtn,
+            () => { // Click Action: LAP
+                if (timerState.running && timerState.mode === 'stopwatch') {
+                    recordLap();
+                }
+            },
+            () => { // Hold Action: RESET (不需要 pressStartTime)
+                if (!timerState.running) {
+                    resetTimer();
+                }
+            }
+        );
+
+        // --- 訓練流程邏輯 (Workout Flow Logic) ---
+
+        startDay1Btn.addEventListener('click', () => startTraining('day1'));
+        startDay2Btn.addEventListener('click', () => startTraining('day2'));
+
+        function startTraining(dayId) {
+            currentDayId = dayId;
+            currentDayPlan = trainingPlan[dayId];
+            if (!currentDayPlan || currentDayPlan.length === 0) return;
+
+            currentStepIndex = 0;
+            if (dayId === 'day1') {
+                day1Results = [];
+            } else {
+                day2Results = [];
+            }
+            trainingInProgress = true;
+
+            showView('training'); // 切換到訓練視圖
+            loadStep(true); // true 表示重置計時器
+        }
+
+        function getLangString(key) {
+            return textStrings[currentLang][key] || textStrings['en'][key] || key;
+        }
+
+        function loadStep(reset) {
+            if (!currentDayPlan || currentStepIndex >= currentDayPlan.length) {
+                finishTraining();
+                return;
+            }
+
+            const step = currentDayPlan[currentStepIndex];
+
+            // 更新 UI
+            // 優先使用 step.name_xx，如果沒有，再使用 name_key
+            const stepName = step[`name_${currentLang}`] || getLangString(step.name_key);
+            const stepDescText = step[`desc_${currentLang}`] || getLangString(step.desc_key);
+            
+            stepTitle.innerText = stepName;
+            stepDesc.innerText = stepDescText;
+            
+            const stepNum = currentStepIndex + 1;
+            const totalSteps = currentDayPlan.length;
+            stepProgress.innerText = `${getLangString('progressStep')} ${stepNum} ${getLangString('progressOf')} ${totalSteps}`;
+            stepProgressBar.style.width = `${(stepNum / totalSteps) * 100}%`;
+
+            // 顯示動畫
+            showAnimation(step.animationId);
+
+            // 設置計時器
+            timerState.mode = step.type;
+            timerState.targetDuration = step.duration || 0;
+            timerState.remainingTime = step.duration || 0;
+            timerState.elapsedTime = 0; // 重置 elapsedTime
+            
+            if (reset) {
+                resetTimer();
+            } else {
+                // 僅更新顯示，不重置狀態 (用於語言切換)
+                const displayTime = timerState.mode === 'timer' ? timerState.remainingTime : timerState.elapsedTime;
+                timerDisplay.innerText = formatTime(displayTime);
+                updateTimerButtons();
+            }
+        }
+
+        function finishTraining() {
+            trainingInProgress = false;
+            
+            // 自動切換到摘要頁面並生成
+            showView('summary');
+            showSummaryModal(); // 自動彈出摘要
+        }
+        
+        function getStepResult(skipped) {
+            const step = currentDayPlan[currentStepIndex];
+            let actualTime;
+
+            if (skipped) {
+                actualTime = getLangString('summarySkipped');
+            } else if (timerState.mode === 'stopwatch') {
+                actualTime = formatTime(timerState.elapsedTime);
+            } else { // 'timer'
+                // 對於倒數計時，我們記錄實際花費的時間
+                const actualElapsedTime = timerState.targetDuration - timerState.remainingTime;
+                actualTime = formatTime(actualElapsedTime);
+            }
+            
+            // 獲取用於摘要的特定名稱
+            const summaryName = step[`name_${currentLang}`] || getLangString(step.name_key);
+            
+            return {
+                name: summaryName,
+                target: step.target,
+                actual: actualTime,
+                skipped: skipped,
+                group: step.group || 'main' // 獲取步驟的類型
+            };
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (timerState.running) return; // 正在計時不允許
+            
+            const result = getStepResult(false); // false = not skipped
+            
+            if (currentDayId === 'day1') {
+                day1Results.push(result);
+            } else {
+                day2Results.push(result);
+            }
+
+            currentStepIndex++;
+            loadStep(true);
+        });
+
+        skipBtn.addEventListener('click', () => {
+            if (timerState.running) {
+                stopTimer(); // 移除 Date.now() 參數
+            }
+            
+            const result = getStepResult(true); // true = skipped
+
+            if (currentDayId === 'day1') {
+                day1Results.push(result);
+            } else {
+                day2Results.push(result);
+            }
+
+            currentStepIndex++;
+            loadStep(true);
+        });
+
+
+        // --- 摘要彈出視窗邏輯 (Summary Modal Logic) ---
+
+        function generateSummary() {
+            // 設置日期
+            summaryDateEl.innerText = new Date().toLocaleDateString(currentLang === 'en' ? 'en-US' : 'zh-TW', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+            });
+            
+            // 設置標題
+            const titleKey = currentDayId === 'day1' ? 'modalSummaryDay1' : 'modalSummaryDay2';
+            summaryTitleEl.innerText = getLangString(titleKey);
+            
+            const results = (currentDayId === 'day1') ? day1Results : day2Results;
+            
+            // *** 過濾：只顯示 'main' group 的項目 ***
+            const mainResults = results.filter(r => r.group === 'main');
+            
+            if (mainResults.length === 0) {
+                dynamicSummaryContent.innerHTML = `<p class="text-gray-500" data-lang-key="noSummaryData">${getLangString('noSummaryData')}</p>`;
+                return;
+            }
+
+            let html = '';
+            const targetKey = getLangString('summaryTarget');
+            const actualKey = getLangString('summaryActual');
+
+            mainResults.forEach(result => {
+                const actualDisplay = result.skipped 
+                    ? `<span class="font-medium text-yellow-600">${result.actual}</span>`
+                    : `<span class="font-bold text-blue-600">${result.actual}</span>`;
+
+                html += `
+                    <div class="summary-item">
+                        <h4 class="text-sm font-semibold text-gray-800">${result.name}</h4>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-gray-600">${targetKey}: ${result.target || 'N/A'}</span>
+                            ${actualDisplay}
+                        </div>
+                    </div>
+                `;
+            });
+
+            dynamicSummaryContent.innerHTML = html;
+        }
+
+        function showSummaryModal() {
+            generateSummary(); // 每次打開時都重新生成
+            summaryModal.classList.add('active');
+        }
+
+        function hideSummaryModal() {
+            summaryModal.classList.remove('active');
+        }
+
+        generateBtn.addEventListener('click', showSummaryModal);
+        closeBtn.addEventListener('click', hideSummaryModal);
+        summaryModal.addEventListener('click', (e) => {
+            // 點擊背景關閉
+            if (e.target === summaryModal) {
+                hideSummaryModal();
+            }
+        });
+
+
+        // --- 初始化 (Initialization) ---
+        document.addEventListener('DOMContentLoaded', () => {
+            setLanguage('zh'); // 預設為繁體中文
+            showView('day1'); // 預設顯示第 1 天
+        });
+
+    </script>
+</body>
+</html>
+
