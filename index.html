@@ -1,12 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
++    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <title>800m 訓練應用程式</title>
++    <script>
++        // Prevent pinch-to-zoom (iOS/Android) and basic double-tap zoom
++        // Keeps touch events functional; prevents gesturestart and quick double taps.
++        document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
++        let _lastTouch = 0;
++        document.addEventListener('touchend', function (e) {
++            const now = Date.now();
++            if (now - _lastTouch <= 300) {
++                e.preventDefault(); // prevents quick double-tap zoom
++            }
++            _lastTouch = now;
++        }, { passive: false });
++    </script>
     <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 Inter 字體 -->
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
